@@ -1,0 +1,63 @@
+name: build latexindent executable
+
+on: 
+  workflow_dispatch:
+
+jobs:
+  build-windows-exe:
+    name: 'create Windows executable latexindent.exe using Strawberry Perl 5.32 on Windows'
+    runs-on: 'windows-latest'
+    steps:
+      #
+      # checkout github.com/cmhughes/latexindent.pl
+      # https://github.com/actions/checkout
+      #
+      - name: load the "base actions/checkout" so as to access latexindent.pl
+        uses: actions/checkout@v4
+      #
+      # https://github.com/marketplace/actions/setup-perl-environment
+      #
+      - name: install Strawberry Perl
+        uses: shogo82148/actions-setup-perl@v1
+        with:
+          perl-version: '5.32'
+          distribution: strawberry
+      - name: install Perl modules using cpan
+        run: |
+          wmic os get osarchitecture
+          cpanm -f PAR::Packer
+          cpanm YAML::Tiny
+          cpanm File::HomeDir
+          cpanm Unicode::GCString
+      - name: preparations for PAR packer
+        run: |
+          sed -i'.bak' -r 's,eval\s\"use\sUnicode::GCString\"\sif\s\$switches\{GCString\},use Unicode::GCString,' latexindent.pl
+          SET PAR_VERBATIM=1
+      #
+      # https://metacpan.org/pod/pp
+      # https://github.com/plk/biber/blob/dev/dist/MSWIN64/build.bat
+      #
+      - name: create latexindent.exe using PAR Packer
+        run: >-
+          pp 
+          --addfile="defaultSettings.yaml;lib/LatexIndent/defaultSettings.yaml"
+          --cachedeps=scancache
+          --output latexindent.exe
+          latexindent.pl
+      - name: move latexindent.exe to release directory
+        run: |
+          mkdir -p target/release
+          mv latexindent.exe target/release
+      - name: tiny test of latexindent.exe from release directory
+        run: |
+          cd target/release 
+          ./latexindent.exe --help
+          ./latexindent.exe ../../test-cases/environments/environments-simple-nested.tex
+      #
+      # https://stackoverflow.com/questions/57498605/github-actions-share-workspace-artifacts-between-jobs
+      #
+      - name: upload latexindent.exe as artifact for zipping
+        uses: actions/upload-artifact@master
+        with:
+          name: latexindent.exe
+          path: target/release
